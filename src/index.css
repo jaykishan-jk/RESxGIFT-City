@@ -1,0 +1,97 @@
+@import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500&family=Space+Grotesk:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: #08090a;
+  color: #fafafa;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/*
+ * Fluid headline — each of the 4 span lines stays on a single row.
+ *
+ * Font is sized to the actual available text-column width at each breakpoint:
+ *
+ *   < md  (< 768px)  : text area = 100vw - 40px  (px-5 padding)
+ *   md–lg (768–1023px): text area = 100vw - 160px (md:px-20 padding)
+ *   lg+  (≥ 1024px)  : text area = 54.7vw - 160px (spacer = 45.3vw)
+ *
+ * Calibrated so the longest line ("strength, global standards, and future")
+ * fills without wrapping. whitespace-nowrap on each span enforces single-line.
+ */
+.headline-fluid {
+  /* < md: proportional to (100vw - 40px) */
+  font-size: clamp(20px, calc(5.26vw - 2.1px), 32px);
+  line-height: 1.4;
+}
+
+@media (min-width: 768px) {
+  /* md–lg: proportional to (100vw - 160px) */
+  .headline-fluid {
+    font-size: clamp(32px, calc(5.26vw - 8.4px), 40px);
+  }
+}
+
+@media (min-width: 1024px) {
+  /* lg+: proportional to (54.7vw - 160px) — spacer is now visible */
+  .headline-fluid {
+    font-size: clamp(24px, calc(2.88vw - 8.4px), 40px);
+  }
+}
+
+/*
+ * Hero footer — content-visibility: auto skips rendering the footer entirely
+ * until it approaches the viewport, reducing initial paint cost.
+ * contain-intrinsic-size provides a stable layout estimate so the browser
+ * reserves the right amount of space and avoids layout shifts on scroll.
+ */
+.hero-footer {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 200px;
+}
+
+/*
+ * Globe drop shadow — permanent will-change: filter because blur(80px) never
+ * changes after mount. This is one of the few legitimate permanent use cases:
+ * it tells the browser to keep a compositor layer for this element at all
+ * times, avoiding the promotion cost mid-animation.
+ */
+.globe-shadow {
+  will-change: filter;
+}
+
+/*
+ * Globe canvas clip — clip-path: circle() instead of overflow-hidden +
+ * border-radius. clip-path is GPU-clipped and does NOT force a stacking
+ * context or trigger a CSS repaint on every WebGL frame, unlike overflow:hidden
+ * with border-radius which creates a new stacking context and triggers
+ * software rasterisation of the clip edge.
+ */
+.globe-canvas-clip {
+  clip-path: circle(50% at 50% 50%);
+}
+
+/*
+ * ExploreCTA arrow slots — two absolutely-positioned layers that cross-fade
+ * via opacity instead of GSAP color animation. opacity is GPU-composited and
+ * never triggers a repaint; color changes force SVG repaint on every tick.
+ */
+.arrow-slot {
+  position: absolute;
+  inset: 0;
+  transition: none; /* GSAP drives this, not CSS transitions */
+}
