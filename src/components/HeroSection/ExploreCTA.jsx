@@ -92,15 +92,15 @@ const ExploreCTA = memo(function ExploreCTA({ ctaRef }) {
       {/* Arrow clip container — overflow-hidden clips all three wrappers */}
       <div className="relative w-5 h-5 overflow-hidden shrink-0" aria-hidden="true">
         {/* Gray arrows — loop animation moves these via y transform only */}
-        <div ref={wrapARef} className="absolute inset-0 text-[#666666]">
+        <div ref={wrapARef} className="arrow-slot text-[#666666]">
           <IconDownArrow className="w-5 h-5" />
         </div>
-        <div ref={wrapBRef} className="absolute inset-0 text-[#666666]">
+        <div ref={wrapBRef} className="arrow-slot text-[#666666]">
           <IconDownArrow className="w-5 h-5" />
         </div>
         {/* White overlay — always at y:0, only opacity changes on hover.
             Sits above gray arrows; compositor handles the fade with no repaint. */}
-        <div ref={whiteRef} className="absolute inset-0 text-[#fafafa] opacity-0">
+        <div ref={whiteRef} className="arrow-slot text-[#fafafa] opacity-0">
           <IconDownArrow className="w-5 h-5" />
         </div>
       </div>

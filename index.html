@@ -3,7 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Portfolio</title>
+    <title>RES x GIFT City | Connecting Global Capital to India's
+      Financial Gateway</title>
+      <link rel="icon" type="image/x-icon" href="/src/assets/Favicon.svg">
+    <!--
+      Prefetch the world-atlas JSON used by the globe dot worker.
+      rel="prefetch" queues the request at low priority during idle time so
+      the file is already in the browser cache by the time GlobeCanvas parses
+      and the worker fires its fetch().
+    -->
+    <link rel="prefetch" href="https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json" as="fetch" crossorigin="anonymous" />
   </head>
   <body>
     <div id="root"></div>

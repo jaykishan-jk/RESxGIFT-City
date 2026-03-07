@@ -1,9 +1,14 @@
 import { useEffect, useRef, forwardRef } from 'react';
 import * as THREE from 'three';
-import GlobeDotsWorker from '../workers/globeDots.worker.js?worker';
+
+// dotsPromise was started in globeDotsPreload.js, which is imported synchronously
+// by HeroSection/index.jsx at page-load time — before this lazy chunk even
+// downloads. By the time useEffect runs here, the world-atlas fetch and dot
+// computation are already in flight (or done). Module cache means both files
+// share the exact same promise instance — no second worker, no second fetch.
+import { dotsPromise } from '../workers/globeDotsPreload';
 
 // ── Config ────────────────────────────────────────────────────────────────────
-const DOT_COUNT      = 20000;
 const DOT_SIZE       = 2.5;
 const ROT_Y          = -65 * Math.PI / 180;
 const ROT_X          =  10 * Math.PI / 180;
@@ -15,7 +20,6 @@ const WAVE_INTENSITY = 0.07;
 const WAVE_SPREAD    = 1.3;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-// Kept on main thread — still needed for wave origin + glow dot positions
 function latLonToVec3(lat, lon) {
   const phi = lat * Math.PI / 180;
   const lam = lon * Math.PI / 180;
@@ -117,13 +121,12 @@ const GlobeCanvas = forwardRef(function GlobeCanvas(_props, ref) {
     glowDot.position.copy(oP);
     group.add(glowDot);
 
-    // Halo pulse — driven entirely by GPU via shared uTime uniform.
-    // Previously: haloDot.material.opacity mutated every RAF frame (CPU→GPU upload).
-    // Now: ShaderMaterial reads waveU.uTime directly; no per-frame JS involvement.
+    // Halo pulse — driven by GPU via shared uTime uniform.
+    // No per-frame CPU→GPU opacity upload.
     const haloDot = new THREE.Mesh(
       new THREE.SphereGeometry(0.026, 16, 16),
       new THREE.ShaderMaterial({
-        uniforms: { uTime: waveU.uTime }, // shared object ref — same value as wave shader
+        uniforms: { uTime: waveU.uTime },
         vertexShader: /* glsl */`
           void main() {
             gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
@@ -143,10 +146,8 @@ const GlobeCanvas = forwardRef(function GlobeCanvas(_props, ref) {
     group.add(haloDot);
 
     // ── Render loop ───────────────────────────────────────────────────────────
-    // Only uTime updated per frame — halo opacity now computed in GLSL, not here.
     let rafId;
     const clock = new THREE.Clock();
-
     const animate = () => {
       rafId = requestAnimationFrame(animate);
       waveU.uTime.value = clock.getElapsedTime();
@@ -154,23 +155,22 @@ const GlobeCanvas = forwardRef(function GlobeCanvas(_props, ref) {
     };
     animate();
 
-    // ── Dot placement via Web Worker ──────────────────────────────────────────
-    // Offloads 20k point-in-polygon checks off the main thread (was 800ms–2s).
-    // Worker posts back transferable Float32Arrays (zero-copy, no serialisation).
+    // ── Consume dot data ──────────────────────────────────────────────────────
+    // dotsPromise was started at page-load time (see globeDotsPreload.js).
+    // If the worker finished before this useEffect ran, .then() resolves in
+    // the next microtask and dots appear on the first rendered frame.
     let mounted = true;
-    const worker = new GlobeDotsWorker();
-    worker.postMessage({ dotCount: DOT_COUNT });
-    worker.onmessage = ({ data }) => {
-      if (!mounted) return;
-      if (data.error) { console.error('GlobeCanvas worker error:', data.error); return; }
-      const geo3 = new THREE.BufferGeometry();
-      geo3.setAttribute('position', new THREE.Float32BufferAttribute(data.positions, 3));
-      geo3.setAttribute('color',    new THREE.Float32BufferAttribute(data.colors, 3));
-      group.add(new THREE.Points(geo3, new THREE.PointsMaterial({
-        size: DOT_SIZE * 0.006, vertexColors: true, sizeAttenuation: true,
-      })));
-      worker.terminate();
-    };
+    dotsPromise
+      .then(({ positions, colors }) => {
+        if (!mounted) return;
+        const geo3 = new THREE.BufferGeometry();
+        geo3.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        geo3.setAttribute('color',    new THREE.Float32BufferAttribute(colors, 3));
+        group.add(new THREE.Points(geo3, new THREE.PointsMaterial({
+          size: DOT_SIZE * 0.006, vertexColors: true, sizeAttenuation: true,
+        })));
+      })
+      .catch(err => console.error('GlobeCanvas: dot worker error', err));
 
     // ── Cleanup ───────────────────────────────────────────────────────────────
     return () => {
@@ -178,49 +178,40 @@ const GlobeCanvas = forwardRef(function GlobeCanvas(_props, ref) {
       cancelAnimationFrame(rafId);
       ro.disconnect();
       renderer.dispose();
-      worker.terminate();
     };
   }, []);
 
   return (
     <div
       ref={ref}
-      // transform-gpu: upgrades Tailwind's transform stack to translate3d(),
-      // preserving -translate-y-1/2 / lg:translate-y-0 variables while forcing
-      // GPU layer promotion. Replaces the previous inline style={{ transform: 'translateZ(0)' }}
-      // which silently overwrote all Tailwind transforms (breaking mobile positioning).
       className="absolute right-0 top-1/2 -translate-y-1/2 lg:right-auto lg:left-[14%] lg:top-auto lg:bottom-0 lg:translate-y-0 transform-gpu w-[min(50.5vw,89.81vh)] aspect-square pointer-events-none select-none"
+      style={{ opacity: 0 }}
       aria-hidden="true"
     >
-      {/* DropShadow: 720×720 @ x=150,y=100 inside 970 frame.
-          translateZ(0) promotes to its own compositor layer so the static blur
-          never repaints when sibling canvas elements redraw. */}
+      {/* Drop shadow — .globe-shadow keeps will-change:filter permanent so the
+          blur never needs to promote/demote mid-animation */}
       <div
-        className="absolute rounded-full"
+        className="globe-shadow absolute rounded-full"
         style={{
           left: '15.46%', top: '10.31%', width: '74.23%',
           aspectRatio: '1',
           background: '#191919',
           filter: 'blur(80px)',
-          transform: 'translateZ(0)',
         }}
       />
 
-      {/* canvas container: 870×870 @ x=0,y=100.
-          clip-path: circle(50%) replaces overflow-hidden + border-radius.
-          overflow-hidden + border-radius creates a stacking context that forces
-          paint-time clipping on every WebGL frame. clip-path is applied by the
-          compositor at layer-merge time — no paint involvement. */}
+      {/* Canvas container — .globe-canvas-clip uses clip-path:circle() which
+          is GPU-clipped and doesn't force a stacking context or repaint on
+          every WebGL frame unlike overflow-hidden + border-radius */}
       <div
         ref={containerRef}
-        className="absolute"
-        style={{ left: '0%', top: '10.31%', width: '89.69%', aspectRatio: '1', clipPath: 'circle(50%)' }}
+        className="globe-canvas-clip absolute"
+        style={{ left: '0%', top: '10.31%', width: '89.69%', aspectRatio: '1' }}
       >
         <canvas ref={canvasRef} className="w-full h-full block" />
 
-        {/* Gradient overlay — translateZ(0) promotes it to its own compositor layer.
-            As a static element it is cached once and never repainted, even as the
-            WebGL canvas beneath redraws every frame. */}
+        {/* Gradient overlay — translateZ(0) promotes to its own compositor
+            layer so it's cached and never repainted as WebGL redraws beneath */}
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
