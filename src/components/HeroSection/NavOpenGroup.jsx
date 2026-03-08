@@ -1,4 +1,4 @@
-import { memo, useRef, useLayoutEffect } from 'react';
+import { memo, useRef, useLayoutEffect, useState } from 'react';
 import gsap from 'gsap';
 import { IconArrowRedirect, IconArrowRight, IconWhatsApp, IconFacebook, IconInstagram, IconX, IconLinkedIn } from './icons';
 
@@ -33,6 +33,64 @@ const SOCIALS = [
 
 const FONT = "font-['Google_Sans',sans-serif]";
 
+// ── NewsletterInput ───────────────────────────────────────────────────────────
+// Extracted into its own component so useState hooks are called at the top
+// level of a proper React function — not inside an IIFE inside JSX.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function NewsletterInput() {
+  const [focused, setFocused] = useState(false);
+  const [email,   setEmail]   = useState('');
+  const inputRef = useRef(null);
+  const isValid = EMAIL_RE.test(email);
+
+  // Border colour: white when focused/valid, #333333 at rest
+  const borderColor = focused ? '#ffffff' : '#333333';
+
+  // Button bg: white when valid, #666666 when focused, #333333 at rest
+  const btnBg = isValid ? '#ffffff' : focused ? '#666666' : '#333333';
+
+  // Icon colour: #08090a when valid, #999999 when focused, #666666 at rest
+  const iconColor = isValid ? '#08090a' : focused ? '#999999' : '#666666';
+
+  return (
+    <div className="w-full lg:w-[560px] flex cursor-text" onClick={() => inputRef.current?.focus()}>
+      {/* InputField: flex-1, bg, bottom-border only, px-5 py-4 */}
+      <div
+        className="flex-1 bg-[#08090a] px-5 py-4 flex items-center transition-colors duration-200"
+        style={{ boxShadow: `inset 0 -1px 0 ${borderColor}` }}
+      >
+        <input
+          type="email"
+          placeholder="Your Email"
+          ref={inputRef}
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          className={`w-full bg-transparent text-white text-[16px] leading-6 ${FONT} outline-none placeholder:text-[#999999]
+            [&:-webkit-autofill]:[-webkit-box-shadow:0_0_0_1000px_#08090a_inset!important]
+            [&:-webkit-autofill]:[-webkit-text-fill-color:#ffffff!important]
+            [&:-webkit-autofill:focus]:[-webkit-box-shadow:0_0_0_1000px_#08090a_inset!important]`}
+        />
+      </div>
+
+      {/* Button: 56×56, own fill, 18px padding all sides */}
+      <button
+        aria-label="Subscribe"
+        disabled={!isValid}
+        onClick={() => { if (isValid) setEmail(''); }}
+        className="w-14 h-14 shrink-0 flex items-center justify-center transition-colors duration-200"
+        style={{ backgroundColor: btnBg }}
+      >
+        <span className="transition-colors duration-200" style={{ color: iconColor }}>
+          <IconArrowRight className="w-5 h-5" />
+        </span>
+      </button>
+    </div>
+  );
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 // isOpen  : true = play entrance, false = play exit
 // onClosed: called after exit animation finishes so parent can unmount
@@ -55,6 +113,14 @@ const NavOpenGroup = memo(function NavOpenGroup({ isOpen, onClosed }) {
 
     if (isOpen) {
       // ── Entrance ────────────────────────────────────────────────────────
+      // On mobile: animate to screen-filling height so the panel expands to
+      // fill the viewport just like the desktop version fills its content.
+      // On desktop: 'auto' lets the header grow with the content naturally.
+      const isMobile = window.innerWidth < 1024;
+      const targetH  = isMobile
+        ? window.innerHeight - (wrapperRef.current?.getBoundingClientRect().top ?? 0)
+        : 'auto';
+
       gsap.set(wrapper,    { height: 0, overflow: 'hidden' });
       gsap.set(navLinks,   { opacity: 0, y: 16 });
       gsap.set(newsletter, { opacity: 0, y: 16 });
@@ -63,7 +129,7 @@ const NavOpenGroup = memo(function NavOpenGroup({ isOpen, onClosed }) {
       const tl = gsap.timeline({ defaults: { ease: 'power1.inOut' } });
 
       tl.to(wrapper, {
-        height: 'auto',
+        height: targetH,
         duration: 0.8,
         ease: 'power1.inOut',
         onComplete: () => gsap.set(wrapper, { overflow: 'visible' }),
@@ -183,22 +249,15 @@ const NavOpenGroup = memo(function NavOpenGroup({ isOpen, onClosed }) {
 
           <div ref={newsletterRef} className="border-t border-[#333] lg:pl-8 pt-10 flex flex-col gap-5">
             <div>
-              <p className={`text-[#fafafa] text-[24px] lg:text-[40px] leading-8 lg:leading-[56px] ${FONT}`}>
+              <p className={`text-[#fafafa] text-[24px] lg:text-[32px] leading-8 lg:leading-[48px] ${FONT}`}>
                 Subscribe to
               </p>
-              <p className={`text-[#fafafa] text-[24px] lg:text-[40px] leading-8 lg:leading-[56px] ${FONT}`}>
+              <p className={`text-[#fafafa] text-[24px] lg:text-[32px] leading-8 lg:leading-[48px] ${FONT}`}>
                 our newsletter
               </p>
             </div>
 
-            <div className="w-full lg:w-[560px] h-16 bg-[#08090a] border border-[#1c1c1c] rounded-xl px-5 flex items-center gap-2.5">
-              <input type="email" placeholder="Your Email"
-                className={`flex-1 bg-transparent text-[#666] text-[16px] leading-6 ${FONT} outline-none placeholder:text-[#666]`}
-              />
-              <button aria-label="Subscribe" className="shrink-0 text-white hover:opacity-70 transition-opacity">
-                <IconArrowRight className="w-6 h-6" />
-              </button>
-            </div>
+<NewsletterInput />
           </div>
 
         </div>

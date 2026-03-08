@@ -1,7 +1,7 @@
 import { memo, useRef, useCallback, useLayoutEffect, useState } from 'react';
 import gsap from 'gsap';
 import logoSrc from '../../assets/RES Logo White.png';
-import { IconMenu, IconClose, IconArrowRedirect, IconCallFill } from './icons';
+import { IconMenuAnimated, IconArrowRedirect, IconCallFill } from './icons';
 import NavOpenGroup from './NavOpenGroup';
 
 // ── Shared marquee helper ─────────────────────────────────────────────────────
@@ -89,14 +89,16 @@ const SPAN_CLS = "absolute top-0 bottom-0 flex items-center pointer-events-none 
 const Navbar = memo(function Navbar({ logoRef, navItemsRef }) {
   const [isOpen, setIsOpen]       = useState(false);
   const [panelMounted, setPanelMounted] = useState(false); // stays true during exit anim
-  const headerRef = useRef(null);
+  const headerRef  = useRef(null);
   const backdropRef = useRef(null);
+  const resGroupRef = useRef(null);
 
   // ── Menu refs ──────────────────────────────────────────────────────────────
-  const menuClipRef    = useRef(null);
-  const menuTextRef    = useRef(null);
-  const menuScrollARef = useRef(null);
-  const menuScrollBRef = useRef(null);
+  const menuClipRef        = useRef(null);
+  const menuTextRef        = useRef(null);  // "Menu" label
+  const menuLabelCloseRef  = useRef(null);  // "Close" label
+  const menuScrollARef     = useRef(null);
+  const menuScrollBRef     = useRef(null);
 
   // ── RES Mngmnt refs ────────────────────────────────────────────────────────
   const resClipRef    = useRef(null);
@@ -133,7 +135,9 @@ const Navbar = memo(function Navbar({ logoRef, navItemsRef }) {
     };
 
     const measureAll = () => {
-      applyLabelWidth(menuClipRef, menuTextRef, menuScrollARef, menuScrollBRef);
+      // Measure from the currently active label so clip width stays correct
+      const activeLabelRef = isOpen ? menuLabelCloseRef : menuTextRef;
+      applyLabelWidth(menuClipRef, activeLabelRef, menuScrollARef, menuScrollBRef);
       applyLabelWidth(resClipRef, resTextRef, resScrollARef, resScrollBRef);
       applyContactWidth();
     };
@@ -141,6 +145,31 @@ const Navbar = memo(function Navbar({ logoRef, navItemsRef }) {
     measureAll();
     // Re-measure once custom fonts (e.g. Google Sans) are fully loaded
     document.fonts?.ready.then(measureAll);
+  }, [isOpen]);
+
+  // ── Menu / Close label crossfade ────────────────────────────────────────
+  // Timeline sequences out → in strictly, so the incoming label can never
+  // appear before the outgoing one has fully disappeared.
+  useLayoutEffect(() => {
+    const menuLabel  = menuTextRef.current;
+    const closeLabel = menuLabelCloseRef.current;
+    if (!menuLabel || !closeLabel) return;
+
+    gsap.killTweensOf([menuLabel, closeLabel]);
+
+    if (isOpen) {
+      // Menu out → Close in
+      gsap.timeline()
+        .to(menuLabel,   { opacity: 0, duration: 0.25, ease: 'power1.inOut' })
+        .set(closeLabel, { opacity: 0 })
+        .to(closeLabel,  { opacity: 1, duration: 0.30, ease: 'power1.inOut' });
+    } else {
+      // Close out → Menu in
+      gsap.timeline()
+        .to(closeLabel,  { opacity: 0, duration: 0.18, ease: 'power1.inOut' })
+        .set(menuLabel,  { opacity: 0 })
+        .to(menuLabel,   { opacity: 1, duration: 0.22, ease: 'power1.inOut' });
+    }
   }, [isOpen]);
 
   // ── Menu handlers ──────────────────────────────────────────────────────────
@@ -200,7 +229,6 @@ const Navbar = memo(function Navbar({ logoRef, navItemsRef }) {
     setIsOpen(prev => {
       const opening = !prev;
       if (opening) {
-        // Mount panel first, then isOpen flip triggers entrance anim
         setPanelMounted(true);
         // Shadow fades in with the expansion
         if (headerRef.current) {
@@ -210,6 +238,10 @@ const Navbar = memo(function Navbar({ logoRef, navItemsRef }) {
             { boxShadow: '0 12px 40px 0 rgba(250,250,250,0.10)', duration: 0.8, ease: 'power1.inOut' },
           );
         }
+        // RES Mngmnt fades out
+        if (resGroupRef.current) {
+          gsap.to(resGroupRef.current, { opacity: 0, duration: 0.25, ease: 'power1.inOut', pointerEvents: 'none' });
+        }
       } else {
         // Shadow fades out in sync with the collapse
         if (headerRef.current) {
@@ -217,6 +249,10 @@ const Navbar = memo(function Navbar({ logoRef, navItemsRef }) {
             boxShadow: '0 12px 40px 0 rgba(250,250,250,0)',
             duration: 0.45, ease: 'power1.inOut',
           });
+        }
+        // RES Mngmnt fades back in after panel starts closing
+        if (resGroupRef.current) {
+          gsap.to(resGroupRef.current, { opacity: 1, duration: 0.4, ease: 'power1.inOut', delay: 0.3, pointerEvents: 'auto' });
         }
       }
       return opening;
@@ -237,7 +273,7 @@ const Navbar = memo(function Navbar({ logoRef, navItemsRef }) {
 
       <header
         ref={headerRef}
-        className={`absolute top-0 left-0 right-0 z-[9999] bg-[#08090a]/80 backdrop-blur-[12px] px-5 md:px-20 flex flex-col${panelMounted ? ' h-screen lg:h-auto' : ''}`}
+        className={`absolute top-0 left-0 right-0 z-[9999] bg-[#08090a]/80 backdrop-blur-[12px] px-5 md:px-20 flex flex-col${panelMounted ? ' lg:h-auto' : ''}`}
         role="banner"
       >
       {/* ── NavDefaultGroup ── */}
@@ -270,24 +306,33 @@ const Navbar = memo(function Navbar({ logoRef, navItemsRef }) {
               onMouseEnter={isOpen ? undefined : handleMenuEnter}
               onMouseLeave={isOpen ? undefined : handleMenuLeave}
             >
-              {/* Icon swaps between hamburger and close */}
-              {isOpen
-                ? <IconClose className="w-5 h-5 shrink-0 text-[#ccc] group-hover:text-white transition-colors" />
-                : <IconMenu  className="w-5 h-5 shrink-0 text-[#ccc] lg:text-[#333] group-hover:text-[#fafafa] transition-colors" />
-              }
+              {/* Icon — morphs between hamburger and close */}
+              <IconMenuAnimated
+                isOpen={isOpen}
+                className="w-5 h-5 shrink-0 text-[#ccc] lg:text-[#333] group-hover:text-[#fafafa] transition-colors"
+              />
 
-              {/* Clip container — overflow-hidden to the width of "Menu"/"Close" text */}
+              {/* Clip container — sized to active label; labels crossfade via GSAP */}
               <div
                 ref={menuClipRef}
                 className="relative hidden lg:block overflow-hidden"
                 style={{ height: '24px' }}
               >
-                {/* Original text */}
+                {/* "Menu" label — visible by default */}
                 <span
                   ref={menuTextRef}
-                  className={`absolute inset-0 flex items-center transition-colors whitespace-nowrap ${isOpen ? 'text-[#ccc] group-hover:text-white' : 'text-[#ccc] group-hover:text-white'}`}
+                  className="absolute inset-0 flex items-center text-[#ccc] group-hover:text-white transition-colors whitespace-nowrap"
                 >
-                  {isOpen ? 'Close' : 'Menu'}
+                  Menu
+                </span>
+
+                {/* "Close" label — hidden by default, fades in on open */}
+                <span
+                  ref={menuLabelCloseRef}
+                  className="absolute inset-0 flex items-center text-[#ccc] group-hover:text-white transition-colors whitespace-nowrap"
+                  style={{ opacity: 0 }}
+                >
+                  Close
                 </span>
 
                 {/* Scrolling copy A */}
@@ -304,7 +349,10 @@ const Navbar = memo(function Navbar({ logoRef, navItemsRef }) {
           </div>
 
           {/* RES Mngmnt — hidden below lg */}
-          <div className={`${isOpen ? 'hidden' : 'hidden lg:flex'} flex-1 items-center justify-start gap-5`}>
+          <div
+            ref={resGroupRef}
+            className="hidden lg:flex flex-1 items-center justify-start gap-5"
+          >
             <a
               ref={el => { navItemsRef.current[1] = el; }}
               href="https://www.resmanagement.in/"
@@ -383,9 +431,7 @@ const Navbar = memo(function Navbar({ logoRef, navItemsRef }) {
 
       {/* ── NavOpenGroup — kept mounted during exit for reverse animation ── */}
       {panelMounted && (
-        <div className="flex-1 lg:flex-none overflow-y-auto">
-          <NavOpenGroup isOpen={isOpen} onClosed={handlePanelClosed} />
-        </div>
+        <NavOpenGroup isOpen={isOpen} onClosed={handlePanelClosed} />
       )}
     </header>
     </>

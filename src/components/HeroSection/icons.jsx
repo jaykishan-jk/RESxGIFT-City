@@ -1,6 +1,7 @@
-import { memo } from 'react';
+import { memo, useRef, useLayoutEffect } from 'react';
+import gsap from 'gsap';
 
-// ─── Menu / Close ─────────────────────────────────────────────────────────────
+// --- Menu / Close -------------------------------------------------------------
 export const IconMenu = memo(function IconMenu({ className }) {
   return (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true" className={className}>
@@ -20,7 +21,85 @@ export const IconClose = memo(function IconClose({ className }) {
   );
 });
 
-// ─── Utility ──────────────────────────────────────────────────────────────────
+// Animated icon - morphs between IconMenu.svg and IconClose.svg shapes.
+//
+// TWO-LAYER APPROACH: position and rotation are on completely separate <g>
+// elements so they never interfere with each other's transform origin.
+//
+//   Outer <g> (posRef)  -->  y translation ONLY  (slides line to its row)
+//   Inner <g> (rotRef)  -->  rotation ONLY        (spins around own centre)
+//
+// All three lines are drawn at y=10 (SVG centre).
+// Menu state: outer g offsets top to y=5, bot to y=15.
+// Close state: outer y->0 (lines meet at centre), inner rotates +-45 deg.
+//
+// Because rotation lives on the inner g, svgOrigin:'10 10' always refers to
+// the centre of that untranslated element - the pivot is always perfect.
+export const IconMenuAnimated = memo(function IconMenuAnimated({ className, isOpen }) {
+  const topPosRef  = useRef(null);
+  const botPosRef  = useRef(null);
+  const topRotRef  = useRef(null);
+  const midRotRef  = useRef(null);
+  const botRotRef  = useRef(null);
+  const mountedRef = useRef(false);
+
+  // On mount: offset top/bot lines to menu positions (no animation)
+  useLayoutEffect(() => {
+    if (!topPosRef.current || !botPosRef.current) return;
+    gsap.set(topPosRef.current, { y: -5 });
+    gsap.set(botPosRef.current, { y:  5 });
+  }, []);
+
+  // Animate on every isOpen toggle - skip the very first render
+  useLayoutEffect(() => {
+    const topPos = topPosRef.current;
+    const botPos = botPosRef.current;
+    const topRot = topRotRef.current;
+    const midRot = midRotRef.current;
+    const botRot = botRotRef.current;
+    if (!topPos || !botPos || !topRot || !midRot || !botRot) return;
+    if (!mountedRef.current) { mountedRef.current = true; return; }
+
+    // Kill any running tweens so rapid clicks never leave a stale state
+    gsap.killTweensOf([topPos, botPos, topRot, midRot, botRot]);
+
+    if (isOpen) {
+      // Menu -> Close
+      // Outer: slide both lines to centre (y=10)
+      gsap.to(topPos, { y: 0, duration: 0.55, ease: 'power1.inOut' });
+      gsap.to(botPos, { y: 0, duration: 0.55, ease: 'power1.inOut' });
+      // Inner: rotate around own midpoint - 360 over-spin + 45 deg landing
+      gsap.to(topRot, { rotation:  -405, svgOrigin: '10 10', duration: 0.55, ease: 'power1.inOut' });
+      gsap.to(midRot, { opacity: 0,                          duration: 0.18, ease: 'power1.in'   });
+      gsap.to(botRot, { rotation:  -315, svgOrigin: '10 10', duration: 0.55, ease: 'power1.inOut' });
+    } else {
+      // Close -> Menu
+      // Absolute values guarantee correct shape regardless of interruption
+      gsap.to(topPos, { y: -5, duration: 0.35, ease: 'power1.inOut' });
+      gsap.to(botPos, { y:  5, duration: 0.35, ease: 'power1.inOut' });
+      gsap.to(topRot, { rotation: 0, svgOrigin: '10 10', duration: 0.35, ease: 'power1.inOut' });
+      gsap.to(midRot, { opacity: 1,                       duration: 0.18, delay: 0.2, ease: 'power1.out' });
+      gsap.to(botRot, { rotation: 0, svgOrigin: '10 10', duration: 0.35, ease: 'power1.inOut' });
+    }
+  }, [isOpen]);
+
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true" className={className}>
+      {/* Top line: outer=position, inner=rotation */}
+      <g ref={topPosRef}>
+        <g ref={topRotRef}><path d="M2 10H18" stroke="currentColor" strokeWidth="1.5"/></g>
+      </g>
+      {/* Mid line: fixed at y=10, only fades out */}
+      <g ref={midRotRef}><path d="M2 10H18" stroke="currentColor" strokeWidth="1.5"/></g>
+      {/* Bot line: outer=position, inner=rotation */}
+      <g ref={botPosRef}>
+        <g ref={botRotRef}><path d="M2 10H18" stroke="currentColor" strokeWidth="1.5"/></g>
+      </g>
+    </svg>
+  );
+});
+
+// --- Utility ------------------------------------------------------------------
 export const IconPlus = memo(function IconPlus({ className }) {
   return (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true" className={className}>
@@ -57,7 +136,7 @@ export const IconArrowRedirect = memo(function IconArrowRedirect({ className }) 
 export const IconArrowRight = memo(function IconArrowRight({ className }) {
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M5 12H19"       stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M5 12H19"           stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
       <path d="M12 5L19 12L12 19" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   );
@@ -72,7 +151,7 @@ export const IconDownArrow = memo(function IconDownArrow({ className }) {
   );
 });
 
-// ─── Social ───────────────────────────────────────────────────────────────────
+// --- Social -------------------------------------------------------------------
 export const IconWhatsApp = memo(function IconWhatsApp({ className }) {
   return (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true" className={className}>
